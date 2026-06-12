@@ -26,6 +26,7 @@ treesitter-grammars = [
 ]
 leiden = ["igraph>=0.11", "leidenalg>=0.10"]
 neo4j = ["neo4j>=5.0"]
+anthropic = ["anthropic>=0.40"]
 networkx = ["networkx>=3.0"]
 dev = ["pytest>=8.0"]
 

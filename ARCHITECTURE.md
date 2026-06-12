@@ -206,8 +206,20 @@ seams hold:
   `igraph`/`leidenalg` (`--leiden`, falls back to Louvain when absent).
 - `graph/neo4j_store.py` — a `GraphStore` that persists to Neo4j via batched
   `UNWIND`/`MERGE` and rehydrates a CSR snapshot, swappable for `CsrGraphStore`
-  with no change to extraction, querying, or rendering.
+  with no change to extraction, querying, or rendering. Exercised live against a
+  real database in CI (a Neo4j service container) and locally via
+  `docker-compose.neo4j.yml`.
+- `cache/sqlite_cache.py` — a `FingerprintCache` that persists fragments to
+  SQLite, so incrementality outlives a single process: a cold re-run still only
+  re-extracts files whose fingerprint changed (`--cache-db`).
+- `enrich/anthropic_enricher.py` — an `Enricher` that adds one-line LLM
+  summaries to module nodes via the Anthropic API (`claude-opus-4-8`, structured
+  outputs, prompt-cached system prompt). The client is dependency-injected so it
+  is unit-testable with a fake, and `available()` gates graceful fallback to
+  `NullEnricher` when the SDK/key is absent (`--enrich`).
 
-A CI workflow (`.github/workflows/ci.yml`) installs the offline grammars and
-runs the suite — including **live** tree-sitter extraction on Go/JS fixtures —
-across Python 3.10–3.12, plus an end-to-end CLI smoke test.
+Two CI jobs (`.github/workflows/ci.yml`): the main job installs the offline
+grammars and runs the suite — including **live** tree-sitter extraction on
+Go/JS fixtures — across Python 3.10–3.12 plus an end-to-end CLI smoke test; a
+second job spins up a Neo4j service container and round-trips the
+`Neo4jGraphStore` against it.

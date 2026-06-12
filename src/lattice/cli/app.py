@@ -12,6 +12,8 @@ import os
 import sys
 
 from ..cache.fingerprint import InMemoryFingerprintCache
+from ..cache.sqlite_cache import SqliteFingerprintCache
+from ..enrich.anthropic_enricher import AnthropicEnricher
 from ..enrich.llm_port import NullEnricher
 from ..extract.registry import extract_one, register
 from ..extract.extractors.python_ast import PythonAstExtractor
@@ -41,15 +43,28 @@ _RENDERERS = {
 }
 
 
-def build_pipeline(serial: bool) -> Pipeline:
+def build_pipeline(serial: bool, cache_db: str | None,
+                   enrich: bool, status) -> Pipeline:
     scheduler = SerialScheduler() if serial else ProcessPoolScheduler()
+    cache = (SqliteFingerprintCache(cache_db) if cache_db
+             else InMemoryFingerprintCache())
+
+    enricher = NullEnricher()
+    if enrich:
+        anthropic = AnthropicEnricher()
+        if anthropic.available():
+            enricher = anthropic
+        else:
+            print("warning: --enrich requested but the anthropic SDK / API key "
+                  "is unavailable; continuing without enrichment", file=status)
+
     return Pipeline(
         discovery=FileSystemDiscovery(),
         scheduler=scheduler,
         store=CsrGraphStore(),
         extract_fn=extract_one,
-        cache=InMemoryFingerprintCache(),
-        enricher=NullEnricher(),
+        cache=cache,
+        enricher=enricher,
     )
 
 
@@ -67,6 +82,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="prefer the Leiden algorithm (falls back to Louvain)")
     parser.add_argument("--serve", action="store_true",
                         help="after building, expose the graph as an MCP stdio server")
+    parser.add_argument("--cache-db", metavar="PATH",
+                        help="persist the incremental cache to a SQLite file")
+    parser.add_argument("--enrich", action="store_true",
+                        help="add LLM summaries to modules (needs the anthropic extra)")
     parser.add_argument("--serial", action="store_true",
                         help="disable the process pool (deterministic)")
     args = parser.parse_args(argv)
@@ -74,7 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     # In --serve mode stdout must carry only JSON-RPC, so status goes to stderr.
     status = sys.stderr if args.serve else sys.stdout
 
-    pipeline = build_pipeline(serial=args.serial)
+    pipeline = build_pipeline(serial=args.serial, cache_db=args.cache_db,
+                              enrich=args.enrich, status=status)
     snapshot = pipeline.run(args.root)
 
     if args.communities:

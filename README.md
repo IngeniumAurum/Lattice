@@ -58,8 +58,17 @@ python -m lattice path/to/project --communities --leiden
 python -m lattice path/to/project --serve
 #   tools: graph_stats · graph_search · graph_neighbors · graph_path
 
+# Persistent incremental cache — re-runs only re-parse changed files, across
+# invocations (cost scales with the diff even on a cold process)
+python -m lattice path/to/project --cache-db .lattice.cache.db
+
+# LLM summaries on module nodes (provider-agnostic Enricher port; Anthropic)
+pip install -e ".[anthropic]"   # needs ANTHROPIC_API_KEY
+python -m lattice path/to/project --enrich
+
 # Persist to Neo4j instead of the in-memory CSR store
-pip install -e ".[neo4j]"   # wire Neo4jGraphStore in cli/app.py
+pip install -e ".[neo4j]"
+docker compose -f docker-compose.neo4j.yml up -d   # then wire Neo4jGraphStore
 ```
 
 ## Layout

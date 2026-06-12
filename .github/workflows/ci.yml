@@ -31,3 +31,31 @@ jobs:
           python -m lattice src -f json mermaid --communities --serial -o /tmp/lattice
           test -s /tmp/lattice.graph.json
           test -s /tmp/lattice.graph.mmd
+
+  neo4j-integration:
+    runs-on: ubuntu-latest
+    services:
+      neo4j:
+        image: neo4j:5
+        env:
+          NEO4J_AUTH: neo4j/latticetest
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p latticetest 'RETURN 1'"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install with the neo4j extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,neo4j]"
+      - name: Round-trip the Neo4jGraphStore against a live database
+        env:
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: latticetest
+        run: pytest -q tests/test_neo4j_integration.py
