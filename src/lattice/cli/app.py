@@ -16,7 +16,7 @@ from ..enrich.llm_port import NullEnricher
 from ..extract.registry import extract_one, register
 from ..extract.extractors.python_ast import PythonAstExtractor
 from ..extract.extractors.treesitter import TreeSitterExtractor
-from ..graph import community
+from ..graph import community, leiden
 from ..graph.csr_store import CsrGraphStore
 from ..ingest.discovery import FileSystemDiscovery
 from ..pipeline.orchestrator import Pipeline
@@ -24,6 +24,8 @@ from ..pipeline.scheduler import ProcessPoolScheduler, SerialScheduler
 from ..render.html_writer import HtmlRenderer
 from ..render.json_writer import JsonRenderer
 from ..render.mermaid_writer import MermaidRenderer
+from ..serve.graph_service import GraphService
+from ..serve.mcp_server import serve as mcp_serve
 
 # Register extractors (Open/Closed: extend by adding lines here, not editing core).
 # Order = priority: the native Python AST is preferred; tree-sitter covers the
@@ -61,18 +63,30 @@ def main(argv: list[str] | None = None) -> int:
                         choices=sorted(_RENDERERS), help="output format(s)")
     parser.add_argument("--communities", action="store_true",
                         help="run community detection and annotate nodes")
+    parser.add_argument("--leiden", action="store_true",
+                        help="prefer the Leiden algorithm (falls back to Louvain)")
+    parser.add_argument("--serve", action="store_true",
+                        help="after building, expose the graph as an MCP stdio server")
     parser.add_argument("--serial", action="store_true",
                         help="disable the process pool (deterministic)")
     args = parser.parse_args(argv)
+
+    # In --serve mode stdout must carry only JSON-RPC, so status goes to stderr.
+    status = sys.stderr if args.serve else sys.stdout
 
     pipeline = build_pipeline(serial=args.serial)
     snapshot = pipeline.run(args.root)
 
     if args.communities:
-        communities = community.detect(snapshot)
+        if args.leiden and leiden.available():
+            communities = leiden.detect(snapshot)
+            algo = "leiden"
+        else:
+            communities = community.detect(snapshot)
+            algo = "louvain"
         snapshot = community.annotate(snapshot, communities)
-        n_comm = len(set(communities.values()))
-        print(f"communities={n_comm}")
+        print(f"communities={len(set(communities.values()))} ({algo})",
+              file=status)
 
     outputs = []
     for fmt in args.format:
@@ -82,7 +96,11 @@ def main(argv: list[str] | None = None) -> int:
         outputs.append(renderer_cls().render(snapshot, out_path))
 
     print(f"nodes={len(snapshot.nodes)} edges={len(snapshot.edges)} -> "
-          f"{', '.join(outputs)}")
+          f"{', '.join(outputs)}", file=status)
+
+    if args.serve:
+        print("lattice MCP server ready on stdio", file=sys.stderr)
+        mcp_serve(GraphService(snapshot))
     return 0
 
 

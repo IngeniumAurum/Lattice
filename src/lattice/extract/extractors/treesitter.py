@@ -4,10 +4,12 @@ One adapter covers many languages via a small, declarative per-language config
 (which AST node types are definitions, and which are calls). Adding a language is
 a dict entry — no new parsing code (Open/Closed, even within the adapter).
 
-Dependencies are optional and lazily loaded: if `tree-sitter-language-pack` is
-not installed, the extractor reports `supports() == False` for every file and the
-pipeline silently falls back to other registered extractors. Importing this
-module never fails, so it is always safe to register.
+Dependencies are optional and lazily loaded. Two grammar sources are tried, in
+order: the individual `tree-sitter-<lang>` packages (compiled, offline), then
+`tree-sitter-language-pack`. If neither can supply a grammar, the extractor
+reports `supports() == False` for that file and the pipeline silently falls back
+to other registered extractors. Importing this module never fails, so it is
+always safe to register.
 """
 
 from __future__ import annotations
@@ -56,31 +58,53 @@ _LANG_CONFIG: dict[str, dict] = {
 }
 
 
+# language -> (module name, factory attribute) for the individual grammar packages.
+_GRAMMAR_MODULES = {
+    "javascript": ("tree_sitter_javascript", "language"),
+    "typescript": ("tree_sitter_typescript", "language_typescript"),
+    "go": ("tree_sitter_go", "language"),
+    "rust": ("tree_sitter_rust", "language"),
+    "java": ("tree_sitter_java", "language"),
+}
+
+
 class TreeSitterExtractor:
     name = "tree-sitter"
 
     def __init__(self) -> None:
         self._parsers: dict[str, object] = {}
-        self._loader = self._make_loader()
-
-    @staticmethod
-    def _make_loader():
-        """Return a callable lang->parser, or None if the dep is absent."""
-        try:
-            from tree_sitter_language_pack import get_parser  # type: ignore
-        except Exception:
-            return None
-        return get_parser
 
     def _parser(self, language: str):
-        if self._loader is None:
-            return None
         if language not in self._parsers:
-            try:
-                self._parsers[language] = self._loader(language)
-            except Exception:
-                self._parsers[language] = None
+            self._parsers[language] = (self._from_grammar_module(language)
+                                       or self._from_language_pack(language))
         return self._parsers[language]
+
+    @staticmethod
+    def _from_grammar_module(language: str):
+        """Build a parser from a compiled tree-sitter-<lang> package (offline)."""
+        spec = _GRAMMAR_MODULES.get(language)
+        if spec is None:
+            return None
+        module_name, attr = spec
+        try:
+            import importlib
+
+            import tree_sitter as ts
+            grammar = importlib.import_module(module_name)
+            lang = ts.Language(getattr(grammar, attr)())
+            return ts.Parser(lang)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _from_language_pack(language: str):
+        """Fall back to tree-sitter-language-pack (may fetch grammars)."""
+        try:
+            from tree_sitter_language_pack import get_parser  # type: ignore
+            return get_parser(language)
+        except Exception:
+            return None
 
     def supports(self, file: SourceFile) -> bool:
         return (file.language in _LANG_CONFIG

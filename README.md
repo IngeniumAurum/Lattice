@@ -39,11 +39,27 @@ diagram, clustered by community). `--communities` runs Louvain local-move
 clustering and annotates every node.
 
 Multi-language parsing (JS/TS, Go, Rust, Java) activates automatically when the
-tree-sitter extra is installed; without it, the pure-stdlib Python extractor
-still works and other languages are skipped:
+tree-sitter grammars are installed; without them, the pure-stdlib Python
+extractor still works and other languages are skipped:
 
 ```bash
-pip install "lattice[treesitter] @ ."   # optional: tree-sitter-language-pack
+pip install -e ".[treesitter-grammars]"   # bundled, offline grammars (used in CI)
+# or: pip install -e ".[treesitter]"       # language-pack (fetches grammars on demand)
+```
+
+### Optional adapters (same ports, swap at the composition root)
+
+```bash
+# Higher-quality clustering via Leiden (falls back to Louvain if absent)
+pip install -e ".[leiden]"
+python -m lattice path/to/project --communities --leiden
+
+# Serve the graph to an IDE over MCP (stdio JSON-RPC; clean stdout)
+python -m lattice path/to/project --serve
+#   tools: graph_stats · graph_search · graph_neighbors · graph_path
+
+# Persist to Neo4j instead of the in-memory CSR store
+pip install -e ".[neo4j]"   # wire Neo4jGraphStore in cli/app.py
 ```
 
 ## Layout
@@ -58,9 +74,14 @@ src/lattice/
   graph/         # csr_store.py    — incremental write, CSR read
   query/         # traversal.py    — BFS / shortest path over CSR
   enrich/        # llm_port.py     — provider-agnostic semantic pass
-  render/        # json_writer.py  — one renderer per output format
+  render/        # json/html/mermaid_writer.py — one renderer per format
+  serve/         # graph_service.py + mcp_server.py — MCP stdio adapter
   cli/           # app.py          — composition root (wires adapters)
 ```
+
+Optional adapters behind the same ports: `graph/leiden.py` (clustering),
+`graph/neo4j_store.py` (`GraphStore`), `extract/extractors/treesitter.py`
+(multi-language).
 
 ## Tests
 

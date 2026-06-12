@@ -188,7 +188,26 @@ The contracts are real, not aspirational — a full slice is implemented:
   search, confidence filter, and community coloring).
 - **Querying:** `query/traversal.py` — BFS shortest path over the CSR arrays.
 
+- **Serving:** `serve/graph_service.py` is a pure query use case (search,
+  neighbors, shortest-path, stats); `serve/mcp_server.py` is a thin driving
+  adapter exposing it over MCP stdio JSON-RPC (`initialize` / `tools/list` /
+  `tools/call`), with no SDK dependency. The split keeps protocol marshalling
+  out of the query logic.
+
 All wired in `cli/app.py`:
-`python -m lattice <path> -f json html mermaid --communities`. Remaining
-extensions (more languages, a Leiden adapter, a Neo4j `GraphStore`, an MCP
-`serve` adapter) plug into these same ports without touching the pipeline.
+`python -m lattice <path> -f json html mermaid --communities --serve`.
+
+### Optional adapters demonstrating the ports
+
+These ship as drop-in substitutes, selected at the composition root, proving the
+seams hold:
+
+- `graph/leiden.py` — same `detect()` contract as Louvain, backed by
+  `igraph`/`leidenalg` (`--leiden`, falls back to Louvain when absent).
+- `graph/neo4j_store.py` — a `GraphStore` that persists to Neo4j via batched
+  `UNWIND`/`MERGE` and rehydrates a CSR snapshot, swappable for `CsrGraphStore`
+  with no change to extraction, querying, or rendering.
+
+A CI workflow (`.github/workflows/ci.yml`) installs the offline grammars and
+runs the suite — including **live** tree-sitter extraction on Go/JS fixtures —
+across Python 3.10–3.12, plus an end-to-end CLI smoke test.
