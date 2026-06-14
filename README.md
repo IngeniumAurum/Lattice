@@ -71,6 +71,29 @@ pip install -e ".[neo4j]"
 docker compose -f docker-compose.neo4j.yml up -d   # then wire Neo4jGraphStore
 ```
 
+## Token impact (feeding the graph to an LLM)
+
+The point of a code-knowledge-graph for LLM workflows is to hand the model a
+compact structural map instead of the whole corpus. The `context` format is a
+token-lean text "code map" built for exactly that — symbols grouped by file,
+each with its outgoing relations, none of JSON's repeated keys or quoting:
+
+```bash
+python -m lattice path/to/project -f context -o map   # -> map.graph.txt
+```
+
+Measure the saving on any tree:
+
+```bash
+python -m lattice.bench.token_impact path/to/project
+```
+
+On Lattice's own `src/` (heuristic ~4 chars/token), the context pack is **~5.7x
+smaller than the raw source (≈82% fewer tokens)**. Note that the JSON renderers
+are *larger* than the source — repeated keys and full-path ids in every node and
+edge — so JSON is the wrong thing to put in a context window; the context pack
+is. (`pip install tiktoken` for exact counts instead of the heuristic.)
+
 ## Layout
 
 ```
@@ -83,7 +106,8 @@ src/lattice/
   graph/         # csr_store.py    — incremental write, CSR read
   query/         # traversal.py    — BFS / shortest path over CSR
   enrich/        # llm_port.py     — provider-agnostic semantic pass
-  render/        # json/html/mermaid_writer.py — one renderer per format
+  render/        # json/html/mermaid/context_writer.py — one renderer per format
+  bench/         # token_impact.py — graph-vs-raw-source token measurement
   serve/         # graph_service.py + mcp_server.py — MCP stdio adapter
   cli/           # app.py          — composition root (wires adapters)
 ```
