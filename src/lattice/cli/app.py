@@ -23,6 +23,7 @@ from ..graph.csr_store import CsrGraphStore
 from ..ingest.discovery import FileSystemDiscovery
 from ..pipeline.orchestrator import Pipeline
 from ..pipeline.scheduler import ProcessPoolScheduler, SerialScheduler
+from ..render.context_writer import ContextRenderer
 from ..render.html_writer import HtmlRenderer
 from ..render.json_writer import JsonRenderer
 from ..render.mermaid_writer import MermaidRenderer
@@ -40,6 +41,8 @@ _RENDERERS = {
     "json": (JsonRenderer, ".graph.json"),
     "html": (HtmlRenderer, ".graph.html"),
     "mermaid": (MermaidRenderer, ".graph.mmd"),
+    # Token-lean text map meant to be dropped straight into an LLM context.
+    "context": (ContextRenderer, ".graph.txt"),
 }
 
 

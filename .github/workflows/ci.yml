@@ -28,9 +28,13 @@ jobs:
 
       - name: Smoke-test the CLI end-to-end
         run: |
-          python -m lattice src -f json mermaid --communities --serial -o /tmp/lattice
+          python -m lattice src -f json mermaid context --communities --serial -o /tmp/lattice
           test -s /tmp/lattice.graph.json
           test -s /tmp/lattice.graph.mmd
+          test -s /tmp/lattice.graph.txt
+
+      - name: Report token impact (graph vs raw source)
+        run: python -m lattice.bench.token_impact src
 
   neo4j-integration:
     runs-on: ubuntu-latest
