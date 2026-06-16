@@ -28,7 +28,9 @@ leiden = ["igraph>=0.11", "leidenalg>=0.10"]
 neo4j = ["neo4j>=5.0"]
 anthropic = ["anthropic>=0.40"]
 networkx = ["networkx>=3.0"]
-dev = ["pytest>=8.0"]
+# Exact token counting for the token-impact benchmark.
+bench = ["tiktoken>=0.7"]
+dev = ["pytest>=8.0", "tiktoken>=0.7"]
 
 [project.scripts]
 lattice = "lattice.cli.app:main"
