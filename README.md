@@ -85,14 +85,22 @@ python -m lattice path/to/project -f context -o map   # -> map.graph.txt
 Measure the saving on any tree:
 
 ```bash
-python -m lattice.bench.token_impact path/to/project
+python -m lattice.bench.token_impact path/to/project           # exact if available
+pip install -e ".[bench]"                                      # adds tiktoken
+python -m lattice.bench.token_impact path/to/project --exact   # exact, or fail loudly
 ```
 
-On Lattice's own `src/` (heuristic ~4 chars/token), the context pack is **~5.7x
-smaller than the raw source (≈82% fewer tokens)**. Note that the JSON renderers
-are *larger* than the source — repeated keys and full-path ids in every node and
-edge — so JSON is the wrong thing to put in a context window; the context pack
-is. (`pip install tiktoken` for exact counts instead of the heuristic.)
+On Lattice's own `src/` the context pack is **~5.8x smaller than the raw source
+(≈83% fewer tokens)**. Note that the JSON renderers are *larger* than the source
+— repeated keys and full-path ids in every node and edge — so JSON is the wrong
+thing to put in a context window; the context pack is.
+
+Counting uses a real BPE tokenizer (`tiktoken`) when its vocabulary is
+reachable, so the ratio is **measured, not estimated**. If tiktoken (or its
+vocab) is unavailable the benchmark falls back to a ~4-chars/token heuristic and
+labels every figure `— ESTIMATE`. Pass `--exact` to forbid that fallback: the
+run fails with an install hint rather than presenting an estimate as a
+measurement.
 
 ## Layout
 

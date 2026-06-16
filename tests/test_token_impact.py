@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from lattice.bench import token_impact
+from lattice.bench.token_impact import Tokenizer
 from lattice.domain.models import Edge, Fragment, Node
 from lattice.graph.csr_store import CsrGraphStore
 from lattice.render.context_writer import ContextRenderer
@@ -18,11 +21,60 @@ from lattice.render.json_writer import JsonRenderer
 SRC = str(Path(__file__).resolve().parents[1] / "src")
 
 
+def _byte_tokenizer() -> Tokenizer:
+    """A real `tiktoken` encoder built in-memory (no network): one token/byte.
+
+    Lets the exact path be tested deterministically and offline, instead of
+    depending on a downloadable vocabulary.
+    """
+    tiktoken = pytest.importorskip("tiktoken")
+    enc = tiktoken.Encoding(
+        name="bytes-test",
+        pat_str=r".",
+        mergeable_ranks={bytes([i]): i for i in range(256)},
+        special_tokens={},
+    )
+    return Tokenizer(name="tiktoken/bytes-test", exact=True, encode=enc.encode)
+
+
 def test_count_tokens_is_sane():
     assert token_impact.count_tokens("") == 0
     assert token_impact.count_tokens("a") >= 1
     # Monotonic in length under the heuristic; tiktoken keeps this true too.
     assert token_impact.count_tokens("x" * 400) > token_impact.count_tokens("x")
+
+
+def test_heuristic_is_marked_not_exact():
+    tok = Tokenizer(name="heuristic(chars/4)", exact=False)
+    assert tok.exact is False
+    assert tok.count("") == 0
+    assert tok.count("abcd") == 1  # 4 chars -> 1 token under the heuristic
+
+
+def test_exact_tokenizer_counts_via_real_bpe():
+    tok = _byte_tokenizer()
+    assert tok.exact is True
+    # Byte-level encoder: ASCII token count equals character count, exactly.
+    assert tok.count("hello") == 5
+    assert tok.count("") == 0
+
+
+def test_require_exact_fails_loudly_when_vocab_unavailable():
+    # A vanishingly unlikely encoding name can never load, so --exact must raise
+    # with an install hint rather than silently returning the heuristic.
+    with pytest.raises(RuntimeError, match="--exact"):
+        token_impact.get_tokenizer("no_such_encoding_xyz", require_exact=True)
+    # Without require_exact the same failure degrades to the labelled heuristic.
+    fallback = token_impact.get_tokenizer("no_such_encoding_xyz")
+    assert fallback.exact is False
+
+
+def test_measure_reports_exactness_flag():
+    report = token_impact.measure(SRC, tokenizer=_byte_tokenizer())
+    assert report.exact is True
+    assert "ESTIMATE" not in report.render_table()
+    # Same structural win must hold under an exact tokenizer, not just chars/4.
+    assert report.reduction("context pack") > 0.5
 
 
 def test_context_pack_beats_raw_source_on_the_package():
